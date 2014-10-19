@@ -1,0 +1,474 @@
+---
+title: "COMP90014 Assignment 2"
+author: "Stuart Lee"
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  pdf_document:
+    fig_caption: yes
+    keep_tex: true
+---
+```{r setup, include=FALSE}
+# libraries
+library(edgeR)
+library(ggplot2)
+library(xtable)
+library(RColorBrewer)
+# knitr options
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, 
+                      tidy = TRUE, digits = 4,   
+                      fig.path = "figures/", 
+                      root.dir = "~/Dropbox/msc/genomics-algorithms/dge-project/")
+```
+
+Analysis of RNA-seq data from Lappalainen, Tuuli, et al (2013) to examine which genes are differentially expressed between men and women. The data is a sample of 40 individuals with 20 biological replicates for each condition (male vs. female).
+
+# Part 1 - Analysis of full sequence data
+
+We begin by reading in the full set of counts data which has an average of 20 million RNA-seq reads per sample.
+
+```{r data-read}
+all.data <- read.delim("./data/assignment2data_fullcounts.tsv", 
+                       header = TRUE, 
+                       stringsAsFactors = FALSE)
+# first 40 column names correspond to biological replicate on either male
+# or female. last 4 columns correspond to gene data
+```
+
+Next we filter the data by removing the rows where the median count is equal to 0 for both males and females. The reason we do this is because we want to exclude non-informative and low-expression genes. An alternative to using the median count would be to compute the counts per million (cpm) of each feature in each replicate. We could then exclude the features where there is not at least 20 replicates with cpm above 1. 
+
+We then split the filtered data set into gene expression set and a gene information data set. The former contains feature counts across the replicates, while the latter contains annotation metadata about the corresponding feature.
+
+```{r filter-step1}
+# column indexes for males and females
+female.replicates <- grep("_F", colnames(all.data))
+male.replicates <- grep("_M", colnames(all.data))
+
+# create a logical vector for row medians both equal to 0 for males and females 
+low.counts <- apply(all.data[, female.replicates], 1, median) == 0 & 
+  apply(all.data[, male.replicates], 1, median) == 0
+
+filtered <- all.data[!low.counts,]
+
+expression <- filtered[, c(female.replicates, male.replicates)]
+gene.info <- filtered[, -c(female.replicates, male.replicates)]
+```
+
+We can now commence the differential gene analysis using edgeR. We construct a vector called groups, which corresponds to whether a feature belongs to the male or female cohort. Then we construct a DGEList object, which stores the count data.
+
+```{r dge part 1}
+# first 20 columns are female replicates (we code as 0), last 20 are male (we code as 1)
+groups <- as.numeric(grepl("_M", colnames(expression)))
+
+dge <- DGEList(counts = expression, group = groups)
+```
+
+Next we need to normalise the counts. The reason we do this is to ensure that our estimates of expression between the two groups are comparable across genes and samples (that is, different biological conditions.). The default setting for calculating normalisation factors in edgeR is to use the trimmed mean of M values (TMM) method. This adjusts the counts of the features by using a scaling factor on each sample relative to all the others. 
+
+Following this we can implement multi-dimensional scaling on the normalised data to examine the relationships between all samples. This plot gives us an idea of how similar samples are within  and between groups. 
+
+```{r normalisation, fig.cap="MDS plot of full counts dataset"}
+# then normalise using trimmed mean
+dge <- calcNormFactors(dge)
+
+# plot MDS to see if we get good seperation between conditions
+plotMDS(x = dge, col = ifelse(groups == 1, "blue", "green"), cex = 0.4)
+```
+
+We can see the replicates cluster to their own groups and there is separation between groups. 
+
+We then estimate the dispersion factors for the counts. The dispersion factor calculated in `estimateCommonDisp` is the overall estimate of the squared biological coefficient of variation across all tags. This is the squared ratio of the standard deviation and mean in the overall expression levels. The dispersion factor calculated in `estimateTagwiseDisp` is the estimate of dispersion in individual tags. The calculation of dispersion at both of these levels is necessary to make valid inference on hypothesis tests of expression differences (because it is an assumption of the negative binomial model, which is used to model the count data).  
+
+```{r dge part 2}
+# calculate dispersion
+dge <- estimateCommonDisp(dge)
+dge <- estimateTagwiseDisp(dge)
+```
+
+We are now ready to run hypothesis tests on our counts data. We construct a function called `get_pvalues`, which takes a DGEList object and a data.frame of gene information and computes the hypothesis tests at the gene level between groups. We output a data.frame which contains the results of this analysis sorted by P-value in ascending order and log fold-change in descending order. 
+
+```{r pvalfun,  include=FALSE}
+# compute P-values
+get_pvalues <- function(dgObj, geneset) {
+  # function to output a sorted data frame
+  # of differentially expressed genes
+  tmp <- geneset
+  tmp$id <- rownames(geneset)
+  results <- exactTest(dgObj)
+  # obtain adjusted P-values using topTags
+  top.hits <- topTags(results, n = nrow(geneset), sort.by = 'none')$table
+  top.hits$id <- rownames(top.hits)
+  names(top.hits) <- sub("FDR", "adjPValue", names(top.hits))
+  
+  # merge and then sort results by adjusted p-value and magnitude of log fold change
+  diff.genes <- merge(top.hits, tmp, all.x = TRUE, by = "id")
+  
+  diff.genes.sort <- diff.genes[order(diff.genes$adjPValue, -abs(diff.genes$logFC)),]
+  
+  return(diff.genes.sort)
+  
+}
+```
+
+```{r all-res, cache=TRUE}
+all.results <- get_pvalues(dge, gene.info)
+
+```
+
+We now present some results from our analysis:
+
+The top ten differentially expressed genes (according to smallest adjusted P-value) are:
+```{r top tens, results = "asis"}
+# top 10 differentially expressed genes
+cols.to.print <- c("chromosome_name", "gene_name", "adjPValue", "logFC")
+top10 <- xtable(head(all.results[, cols.to.print], 10))
+print(top10, include.rownames = FALSE, comment = FALSE)
+```
+
+The bottom ten differentially expressed genes (according to largest adjusted P-value) are:
+```{r bottom tens, results="asis"}
+# bottom 10 differentially expressed genes
+bottom10 <- xtable(tail(all.results[, cols.to.print], 10))
+print(bottom10, include.rownames = FALSE, comment = FALSE)
+```
+
+We also construct a function that displays a heat map for the genes. The rows are the top 20 differentially expressed genes, the columns are the samples and each cell is filled with the log counts per million value. We use a three colour scale to indicate whether the gene is being up (red), down (blue), or stably (white) regulated in the replicate. 
+
+```{r all-heatmap-fun, include = FALSE}
+top20_heatmap <- function(dgeObj, results_data, ...) {
+  # draw a heatmap from dge object
+  # and a data frame that contains results
+  # of top hits of differentially expressed genes
+  
+  # generate a color-pallete
+  heatcols <- colorRampPalette(c("darkblue","white","darkred"))
+  log.cpm <- cpm(dgeObj, prior.count = 2, log = TRUE)
+  top20 <- log.cpm[results_data[1:20, "id"],]
+  rownames(top20) <- results_data[1:20, "gene_name"]
+  heatmap(top20, Rowv=NA, Colv=NA, 
+          col = heatcols(256), margins = c(3, 3), 
+          cexRow = 0.6, cexCol = 0.4, ...)
+}
+```
+
+```{r heat-all, fig.cap="Heatmap of top 20 differentially expressed genes in full counts data"}
+top20_heatmap(dge, all.results)
+
+```
+
+We also construct a function to plot the histogram of raw P-values from our analysis.
+```{r pvalhist-fun, include=FALSE}
+pvalue_hist <- function(results_data, ...) {
+  # draw a histogram from the dge p-values
+  hist(results_data[, "PValue"], main = "P-value distribution", xlab = "P-value", ...)
+  }
+```
+
+```{r pval-hist, fig.cap="P-value histogram for full counts data"}
+pvalue_hist(all.results, breaks = 150)
+```
+
+The P-values histogram resulting from multiple hypothesis tests on continuous data are uniformly distributed between 0 and 1. The histogram obtained for comparison of genes are approximately uniformly distributed between 0 and 1, which produces approximately equal size bars in the histogram. The spike at 0 are the result of the genes that are strongly differentially expressed. However, because of multiple comparisons, the number of true discoveries is the height of the spike at 0 relative to the other bar heights up to 1. There is also a spike at 1 due to the due to the discreteness of the counts data.   
+
+Finally, we construct a function to store a list of the answers to the questions presented below (see appendix for details).
+
+```{r answer-qs, include=FALSE}
+answer_questions <- function(results_data) {
+  # this function returns a list with 4 slots
+  # where each slot contains a vector of 
+  # solutions to the questions in the assignment spec
+  # assume the input data frame is sorted
+  
+  # q1 number of genes with P-values below 0.05
+  answers <- list()
+  signif.genes <- sum(results_data[, "adjPValue"] < 0.05)
+  prop.signif.genes <- round(signif.genes / nrow(results_data), 4)
+  answers[["q1"]] <- c(signif.genes, prop.signif.genes)
+  
+  # q2 how many genes on Y-chr are differentially expressed
+  ygenes <- results_data[, "chromosome_name"] == "Y"
+  signif.ychr <- sum(results_data[ygenes, "adjPValue"] < 0.05)
+  prop.signif.ychr <- round(signif.ychr / sum(ygenes), 4)
+  answers[["q2"]] <- c(signif.ychr, prop.signif.ychr)
+  
+  
+  # q3 top 100 genes, how many are from the X chromosome
+  top100 <- results_data[1:100, ]
+  topX <- sum(top100$chromosome_name == "X")
+  answers[["q3"]] <- topX
+  
+  # q4 log-FC for xist gene
+  xist.index <- which(results_data[, "gene_name"] == "XIST")
+  xist.logFC <- round(results_data[xist.index, "logFC"], 4)
+  answers[["q4"]] <- c(xist.index, xist.logFC)
+  
+  return(answers)
+}
+```
+
+```{r qans}
+all.answers <- answer_questions(all.results)
+
+```
+
+### Part 1: Questions
+
+1. How many genes, in total, have P-values below 0.05? What proportion is this of all genes tested?
+There are `r all.answers[["q1"]][1]` genes that have P-values below 0.05. The proportion of this to all genes tested is `r all.answers[["q1"]][2]`.
+
+2. Out of all genes on the Y chromosome, how many have a P-value below 0.05?
+There are `r all.answers[["q2"]][1]` genes on the Y chromosome that have a P-value below 0.05. The proportion of this to the total number genes on the Y chromosome is `r all.answers[["q2"]][2]`.
+
+3. Out of the 100 genes with the lowest P-values, how many are from the X chromosome?
+There are `r all.answers[["q3"]][1]` X chromosome genes in the top 100 genes with the lowest P-values.
+
+4. What is the log fold-change for the gene XIST? (This gene is found on the X chromosome and is responsible for inactivating one copy of the X-chromosome in women). Give your answer to four decimal places.
+The log fold-change for XIST is `r all.answers[["q4"]][2]`. 
+
+# Part 2: Analysis of subsampled data
+
+We now carry out a differential gene expression analysis using a subset of the full counts data. This time there is only an average of approximately 1 million reads per sample. The analysis proceeds the same as in Part 1.  
+
+```{r sub-dge}
+# read in the subsampled data, unique to my student number
+sub.data <- read.delim("./data//assignment2data_subsampled_666351.tsv", 
+                       header = TRUE, 
+                       stringsAsFactors = FALSE)
+
+# column indexes for males and females
+female.replicates <- grep("_F", colnames(sub.data))
+male.replicates <- grep("_M", colnames(sub.data))
+
+# filter and split the data set
+low.counts.sub <- apply(sub.data[, female.replicates], 1, median) == 0 & 
+  apply(sub.data[, male.replicates], 1, median) == 0
+
+sub.filtered <- sub.data[!low.counts, ]
+
+sub.expression <- sub.filtered[, c(female.replicates, male.replicates)]
+sub.geneinfo <- sub.filtered[, -c(female.replicates, male.replicates)]
+
+# conduct the differentail gene expression analysis
+groups <- as.numeric(grepl("_M", colnames(sub.expression)))
+
+dge.sub <- DGEList(counts = sub.expression, group = groups)
+
+# then normalise using trimmed mean
+dge.sub <- calcNormFactors(dge.sub)
+```
+
+We make an MDS plot as before.
+
+```{r mds2, fig.cap="MDS plot of replicates in subset data"}
+# plot MDS to see if we get good seperation between conditions
+plotMDS(x = dge.sub, col = ifelse(groups == 1, "blue", "green"), cex = 0.4)
+
+```
+
+In this MDS plot the samples in the female group are less similar to each other compared to the results in part 1, and there appears to be an outlier sample. There appears to be more spread in each group and there is less separation between the two groups.
+
+Again we calculate the dispersion factors before computing the hypothesis tests.
+
+```{r sub-dge 2 results, cache=TRUE}
+# calculate dispersion
+dge.sub <- estimateCommonDisp(dge.sub)
+dge.sub <- estimateTagwiseDisp(dge.sub)
+# compute P-values
+results.sub.all <- get_pvalues(dge.sub, sub.geneinfo)
+```
+
+From this analysis we get the following top 10 differentially expressed genes:
+
+```{r sub top10, results='asis'}
+# print results
+top10.sub <- xtable(head(results.sub.all[, cols.to.print], 10))
+print(top10.sub, include.rownames = FALSE, comment = FALSE)
+```
+
+The bottom 10 differentially expressed genes are:
+
+```{r sub bottom10, results='asis'}
+bottom10.sub <- xtable(tail(results.sub.all[, cols.to.print], 10))
+print(bottom10.sub, include.rownames = FALSE, comment = FALSE)
+```
+
+Finally, we plot the heat map of the top 20 differentially expressed genes and the P-value distribution.
+
+```{r sub-final-results, fig.cap="Heatmap of gene expression for subset data"}
+# answer questions
+q.subs <- answer_questions(results.sub.all)
+```
+
+```{r sub-heat, fig.cap="Heatmap of gene expression for subset data"}
+# draw heatmap 
+top20_heatmap(dge.sub, results.sub.all)
+```
+
+From the heatmap we observe that log counts per million amongst replicates in the female group are much less pronounced than in part 1. However, the general pattern of expression is still present.
+
+
+```{r sub-pval, fig.cap="Raw P-value distribution for subset data"}
+# draw P-value histogram
+pvalue_hist(results.sub.all, breaks = 150)
+```
+
+### Part 2: Questions
+1. How many genes, in total, have P-values below 0.05? What proportion is this of all genes tested?
+There are `r q.subs[["q1"]][1]` genes that have P-values below 0.05. The proportion of this to all genes tested is `r q.subs[["q1"]][2]`.
+
+2. Out of all genes on the Y chromosome, how many have a P-value below 0.05?
+There are `r q.subs[["q2"]][1]` genes on the Y chromosome that have a P-value below 0.05. The proportion of this to the total number genes on the Y chromosome is `r q.subs[["q2"]][2]`.
+
+3. Out of the 100 genes with the lowest P-values, how many are from the X chromosome?
+There are `r q.subs[["q3"]][1]` X chromosome genes in the top 100 genes with the lowest P-values.
+
+4. What is the log fold-change for the gene XIST? (This gene is found on the X chromosome and is responsible for inactivating one copy of the X-chromosome in women). Give your answer to four decimal places.
+The log fold-change for XIST is `r q.subs[["q4"]][2]`. 
+
+# Part 3 - Sensitivity analysis
+
+Next we run a differential gene expression analysis by shuffling the group memberships randomly.
+
+```{r random dge, cache=TRUE}
+# set seed for reproducibility
+set.seed(90014)
+random.groups <- sample(c(0,1), size = 40, replace = TRUE)
+print(random.groups)
+
+dge.rand <- DGEList(counts = sub.expression, group = random.groups)
+dge.rand <- calcNormFactors(dge.rand)
+dge.rand <- estimateCommonDisp(dge.rand)
+dge.rand <- estimateTagwiseDisp(dge.rand)
+
+# compute p-values
+results.rand <- get_pvalues(dge.rand, sub.geneinfo)
+
+```
+
+For the sensitivity analysis we get the following top 10 differentially expressed genes:
+
+```{r rand top10, results='asis'}
+# print results
+top10.rand <- xtable(head(results.rand[, cols.to.print], 10))
+print(top10.rand, include.rownames = FALSE, comment = FALSE)
+```
+
+The bottom 10 differentially expressed genes are:
+
+```{r rand bottom10, results='asis'}
+bottom10.rand <- xtable(tail(results.rand[, cols.to.print], 10))
+print(bottom10.rand, include.rownames = FALSE, comment = FALSE)
+```
+
+
+Finally, we present the top 20 heat map and the p-value distribution plots.
+
+```{r rand results}
+rand.answers <- answer_questions(results.rand)
+```
+
+```{r heat-rand, fig.cap="Heatmap of gene expression for sensitivity analysis"}
+top20_heatmap(dge.rand, results.rand)
+```
+
+In this heatmap we see more cells that have near zero values of log counts per million, compared to the heatmap obtained in part 2.
+
+```{r pval-rand, fig.cap="P-value distribution for sensitivity analysis"}
+pvalue_hist(results.rand, breaks = 150)
+
+```
+
+### Part 3: Questions
+
+1. How many genes, in total, have P-values below 0.05? What proportion is this of all genes tested?
+There are `r rand.answers[["q1"]][1]` genes that have P-values below 0.05. The proportion of this to all genes tested is `r rand.answers[["q1"]][2]`.
+
+2. Out of all genes on the Y chromosome, how many have a P-value below 0.05?
+There are `r rand.answers[["q2"]][1]` genes on the Y chromosome that have a P-value below 0.05. The proportion of this to the total number genes on the Y chromosome is `r rand.answers[["q2"]][2]`.
+
+3. Out of the 100 genes with the lowest P-values, how many are from the X chromosome?
+There are `r rand.answers[["q3"]][1]` X chromosome genes in the top 100 genes with the lowest P-values.
+
+4. What is the log fold-change for the gene XIST? (This gene is found on the X chromosome and is responsible for inactivating one copy of the X-chromosome in women). Give your answer to four decimal places.
+The log fold-change for XIST is `r rand.answers[["q4"]][2]`. 
+
+# Part 4 - Discussion
+
+## Results on full counts data vs. results on subsampled counts data
+
+In Part 1 we performed an analysis on the entire RNA-seq data set, which had approximately an average of 20 million reads per sample. This differed from the analysis performed in part 2, where we had a sub-sample of the original data set. This data set has on average 1 million reads per sample and reads were randomly selected, indicating that the data set in part 2 has lower coverage than the full data set used in part 1. This alters the count distribution of genes in each replicate. This means that we have introduced additional sampling error in part 2, decreasing the power to detect differentially expressed genes and altering the magnitude of the log fold-change between groups. 
+
+We start by comparing the number of samples that were removed in our filtered data set that we performed our hypothesis testing on.  In part 1, we filtered `r sum(low.counts)` features compared to the `r sum(low.counts.sub)` features removed on the sub-sampled data set. Moreover, the features included in the analysis for part 2 are a subset of the features in part 1, meaning that our analysis in part 2 identifies different differentially expressed genes.  
+
+```{r common-features, include = FALSE}
+# examine the number of features common to both filter steps
+features.all <- names(low.counts[low.counts == FALSE])
+features.sub <- names(low.counts.sub[low.counts.sub == FALSE])
+all(intersect(features.all, features.sub) == features.sub)
+
+```
+
+By examining the MA-plots between analyses, we can see the effect that reduced number of features and lower coverage had on our analysis. The MA-plot is obtained in `edgeR` with the function `plotSmear`, it is a plot of the log fold-change between males and females (normalised expression) against the average log counts per million over both groups. The yellow dots represent the 'smear', these are points, where counts are low in the libraries of either the male or female groups. The top 20 significantly differentially expressed genes (by lowest adjusted P-value) are highlighted red. A lowess trend line has been fitted to the relationship between M and A.
+
+
+```{r ma-plots, fig.cap = "Diagnostic plots for analysis. (left): MA-plot for full counts data. (right): MA-plot for subset counts data."}
+par(mfrow = c(1,2))
+de.tags.all <- all.results[1:20 ,"id"]
+de.tags.sub <- results.sub.all[1:20, "id"]
+plotSmear(dge, de.tags = de.tags.all, 
+          lowess = TRUE)
+plotSmear(dge.sub, de.tags = de.tags.sub, 
+          lowess = TRUE)
+```
+
+There are several features of the two plots that we note. In both plots, there doesn't appear to be any trend in the relationships between fold change and average log counts per million, highlighting that the normalisation procedure for both analyses has worked properly. Also there are smear points in both plots where genes are in the top 20 differentially expressed genes, indicating that our P-value estimates for these genes may be unreliable. 
+
+Comparing the results in the table below we observe that there are fewer genes that have P-values below 0.05 in part 2 than in part 1. This makes sense because the change in sequence depth in part 2, resulted in alteration of the counts matrix, meaning our filtering processed removed more candidate genes. The top 10 tables obtained in both analyses are relatively similar, with both having 9 genes on the Y chromosome and XIST have P-values below 0.05, with large log-FC. We expect that genes with large magnitude log fold-changes (effect size) will still be identified as differentially expressed even though there is less power.
+
+We see no spike at 0 in the raw P-value histogram for the subset results, indicating that we have found fewer truly differentially expressed genes. Furthermore, due to discreteness of the counts data, we get spikes at intermediate values. 
+
+```{r results summary, results='asis', include=FALSE}
+# summarise results from all parts
+q1a.all <- c(all.answers[["q1"]][1], q.subs[["q1"]][1], rand.answers[["q1"]][1])
+q1b.all <- c(all.answers[["q1"]][2], q.subs[["q1"]][2], rand.answers[["q1"]][2])
+q2.all <- c(all.answers[["q2"]][1], q.subs[["q2"]][1], rand.answers[["q2"]][1])
+q3.all <- c(all.answers[["q3"]][1], q.subs[["q3"]][1], rand.answers[["q3"]][1])
+q4.all <- c(all.answers[["q4"]][2], q.subs[["q4"]][2], rand.answers[["q4"]][2])
+qnames <- c("Significant Genes", "Proportion Significant Genes", "Y-chr Significant Genes", "X-chr top 100 hits", "LogFC of XIST")
+res.summary <- data.frame(qnames, rbind(q1a.all, q1b.all, q2.all, q3.all, q4.all))
+names(res.summary) <- c("Question", "Part 1", "Part 2", "Part 3")
+
+print(xtable(res.summary, include.rownames = FALSE, 
+             comment = FALSE, caption = "Summary of results for all parts"))
+```
+ 
+
+## Results of sensitivity analysis
+
+The sensitivity analysis shuffles the group memberships before conducting hypothesis testing. That is, we randomly label some 'women' as 'men' and some 'men' as 'women' in our replicates and proceed with conducting a differential gene expression analysis. In theory, there should be no differential gene expression in the shuffled data, however there will still be some hits due biological and technical variation. 
+
+In the sensitivity analysis, we obtain far fewer significantly differentially expressed genes compared to the analysis in part 2. We also have no significant hits on the Y chromosome as expected. This means there appears to be no glaring issues with the sub-counts data.
+
+# References
+
+Anders, S., McCarthy, D. J., Chen, Y., Okoniewski, M., Smyth, G. K., Huber, W., & Robinson, M. D. (2013). Count-based differential expression analysis of RNA sequencing data using R and Bioconductor. Nature Protocols, 8(9), 1765–1786. doi:10.1038/nprot.2013.099
+
+Holmes, S., & Martin, T. (n.d.). RNA Sequence Analysis in R: edgeR
+. Web.Stanford.Edu. Retrieved October 16, 2014, from https://web.stanford.edu/class/bios221/labs/rnaseq/lab_4_rnaseq.html
+
+Lappalainen, Tuuli, et al. "Transcriptome and genome sequencing uncovers functional variation in humans." Nature (2013).
+
+# Appendix
+
+Further information to reproduce the output of this report.
+
+**Functions**
+```{r functions}
+get_pvalues
+answer_questions
+top20_heatmap
+pvalue_hist
+```
+
+```{r session-info}
+sessionInfo()
+```

@@ -1,0 +1,967 @@
+\documentclass[]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\usepackage{fixltx2e} % provides \textsubscript
+% use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[utf8]{inputenc}
+\else % if luatex or xelatex
+  \ifxetex
+    \usepackage{mathspec}
+    \usepackage{xltxtra,xunicode}
+  \else
+    \usepackage{fontspec}
+  \fi
+  \defaultfontfeatures{Mapping=tex-text,Scale=MatchLowercase}
+  \newcommand{\euro}{€}
+\fi
+% use microtype if available
+\IfFileExists{microtype.sty}{\usepackage{microtype}}{}
+\usepackage[margin=1in]{geometry}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{{#1}}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{{#1}}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{{#1}}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{{#1}}}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{{#1}}}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{{#1}}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{{#1}}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{{#1}}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{{#1}}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{{#1}}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{{#1}}}
+\newcommand{\RegionMarkerTok}[1]{{#1}}
+\newcommand{\ErrorTok}[1]{\textbf{{#1}}}
+\newcommand{\NormalTok}[1]{{#1}}
+\usepackage{graphicx}
+% Redefine \includegraphics so that, unless explicit options are
+% given, the image width will not exceed the width of the page.
+% Images get their normal width if they fit onto the page, but
+% are scaled down if they would overflow the margins.
+\makeatletter
+\def\ScaleIfNeeded{%
+  \ifdim\Gin@nat@width>\linewidth
+    \linewidth
+  \else
+    \Gin@nat@width
+  \fi
+}
+\makeatother
+\let\Oldincludegraphics\includegraphics
+{%
+ \catcode`\@=11\relax%
+ \gdef\includegraphics{\@ifnextchar[{\Oldincludegraphics}{\Oldincludegraphics[width=\ScaleIfNeeded]}}%
+}%
+\ifxetex
+  \usepackage[setpagesize=false, % page size defined by xetex
+              unicode=false, % unicode breaks when used with xetex
+              xetex]{hyperref}
+\else
+  \usepackage[unicode=true]{hyperref}
+\fi
+\hypersetup{breaklinks=true,
+            bookmarks=true,
+            pdfauthor={Stuart Lee},
+            pdftitle={COMP90014 Assignment 2},
+            colorlinks=true,
+            citecolor=blue,
+            urlcolor=blue,
+            linkcolor=magenta,
+            pdfborder={0 0 0}}
+\urlstyle{same}  % don't use monospace font for urls
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+\setlength{\emergencystretch}{3em}  % prevent overfull lines
+\setcounter{secnumdepth}{0}
+
+%%% Change title format to be more compact
+\usepackage{titling}
+\setlength{\droptitle}{-2em}
+  \title{COMP90014 Assignment 2}
+  \pretitle{\vspace{\droptitle}\centering\huge}
+  \posttitle{\par}
+  \author{Stuart Lee}
+  \preauthor{\centering\large\emph}
+  \postauthor{\par}
+  \predate{\centering\large\emph}
+  \postdate{\par}
+  \date{19 October, 2014}
+
+
+
+
+\begin{document}
+
+\maketitle
+
+
+Analysis of RNA-seq data from Lappalainen, Tuuli, et al (2013) to
+examine which genes are differentially expressed between men and women.
+The data is a sample of 40 individuals with 20 biological replicates for
+each condition (male vs.~female).
+
+\section{Part 1 - Analysis of full sequence
+data}\label{part-1---analysis-of-full-sequence-data}
+
+We begin by reading in the full set of counts data which has an average
+of 20 million RNA-seq reads per sample.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{all.data <-}\StringTok{ }\KeywordTok{read.delim}\NormalTok{(}\StringTok{"./data/assignment2data_fullcounts.tsv"}\NormalTok{, }\DataTypeTok{header =} \OtherTok{TRUE}\NormalTok{, }
+    \DataTypeTok{stringsAsFactors =} \OtherTok{FALSE}\NormalTok{)}
+\CommentTok{# first 40 column names correspond to biological replicate on either male or}
+\CommentTok{# female. last 4 columns correspond to gene data}
+\end{Highlighting}
+\end{Shaded}
+
+Next we filter the data by removing the rows where the median count is
+equal to 0 for both males and females. The reason we do this is because
+we want to exclude non-informative and low-expression genes. An
+alternative to using the median count would be to compute the counts per
+million (cpm) of each feature in each replicate. We could then exclude
+the features where there is not at least 20 replicates with cpm above 1.
+
+We then split the filtered data set into gene expression set and a gene
+information data set. The former contains feature counts across the
+replicates, while the latter contains annotation metadata about the
+corresponding feature.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# column indexes for males and females}
+\NormalTok{female.replicates <-}\StringTok{ }\KeywordTok{grep}\NormalTok{(}\StringTok{"_F"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(all.data))}
+\NormalTok{male.replicates <-}\StringTok{ }\KeywordTok{grep}\NormalTok{(}\StringTok{"_M"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(all.data))}
+
+\CommentTok{# create a logical vector for row medians both equal to 0 for males and}
+\CommentTok{# females}
+\NormalTok{low.counts <-}\StringTok{ }\KeywordTok{apply}\NormalTok{(all.data[, female.replicates], }\DecValTok{1}\NormalTok{, median) ==}\StringTok{ }\DecValTok{0} \NormalTok{&}\StringTok{ }\KeywordTok{apply}\NormalTok{(all.data[, }
+    \NormalTok{male.replicates], }\DecValTok{1}\NormalTok{, median) ==}\StringTok{ }\DecValTok{0}
+
+\NormalTok{filtered <-}\StringTok{ }\NormalTok{all.data[!low.counts, ]}
+
+\NormalTok{expression <-}\StringTok{ }\NormalTok{filtered[, }\KeywordTok{c}\NormalTok{(female.replicates, male.replicates)]}
+\NormalTok{gene.info <-}\StringTok{ }\NormalTok{filtered[, -}\KeywordTok{c}\NormalTok{(female.replicates, male.replicates)]}
+\end{Highlighting}
+\end{Shaded}
+
+We can now commence the differential gene analysis using edgeR. We
+construct a vector called groups, which corresponds to whether a feature
+belongs to the male or female cohort. Then we construct a DGEList
+object, which stores the count data.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# first 20 columns are female replicates (we code as 0), last 20 are male}
+\CommentTok{# (we code as 1)}
+\NormalTok{groups <-}\StringTok{ }\KeywordTok{as.numeric}\NormalTok{(}\KeywordTok{grepl}\NormalTok{(}\StringTok{"_M"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(expression)))}
+
+\NormalTok{dge <-}\StringTok{ }\KeywordTok{DGEList}\NormalTok{(}\DataTypeTok{counts =} \NormalTok{expression, }\DataTypeTok{group =} \NormalTok{groups)}
+\end{Highlighting}
+\end{Shaded}
+
+Next we need to normalise the counts. The reason we do this is to ensure
+that our estimates of expression between the two groups are comparable
+across genes and samples (that is, different biological conditions.).
+The default setting for calculating normalisation factors in edgeR is to
+use the trimmed mean of M values (TMM) method. This adjusts the counts
+of the features by using a scaling factor on each sample relative to all
+the others.
+
+Following this we can implement multi-dimensional scaling on the
+normalised data to examine the relationships between all samples. This
+plot gives us an idea of how similar samples are within and between
+groups.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# then normalise using trimmed mean}
+\NormalTok{dge <-}\StringTok{ }\KeywordTok{calcNormFactors}\NormalTok{(dge)}
+
+\CommentTok{# plot MDS to see if we get good seperation between conditions}
+\KeywordTok{plotMDS}\NormalTok{(}\DataTypeTok{x =} \NormalTok{dge, }\DataTypeTok{col =} \KeywordTok{ifelse}\NormalTok{(groups ==}\StringTok{ }\DecValTok{1}\NormalTok{, }\StringTok{"blue"}\NormalTok{, }\StringTok{"green"}\NormalTok{), }\DataTypeTok{cex =} \FloatTok{0.4}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/normalisation-1.pdf}
+\caption{MDS plot of full counts dataset}
+\end{figure}
+
+We can see the replicates cluster to their own groups and there is
+separation between groups.
+
+We then estimate the dispersion factors for the counts. The dispersion
+factor calculated in \texttt{estimateCommonDisp} is the overall estimate
+of the squared biological coefficient of variation across all tags. This
+is the squared ratio of the standard deviation and mean in the overall
+expression levels. The dispersion factor calculated in
+\texttt{estimateTagwiseDisp} is the estimate of dispersion in individual
+tags. The calculation of dispersion at both of these levels is necessary
+to make valid inference on hypothesis tests of expression differences
+(because it is an assumption of the negative binomial model, which is
+used to model the count data).
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# calculate dispersion}
+\NormalTok{dge <-}\StringTok{ }\KeywordTok{estimateCommonDisp}\NormalTok{(dge)}
+\NormalTok{dge <-}\StringTok{ }\KeywordTok{estimateTagwiseDisp}\NormalTok{(dge)}
+\end{Highlighting}
+\end{Shaded}
+
+We are now ready to run hypothesis tests on our counts data. We
+construct a function called \texttt{get\_pvalues}, which takes a DGEList
+object and a data.frame of gene information and computes the hypothesis
+tests at the gene level between groups. We output a data.frame which
+contains the results of this analysis sorted by P-value in ascending
+order and log fold-change in descending order.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{all.results <-}\StringTok{ }\KeywordTok{get_pvalues}\NormalTok{(dge, gene.info)}
+\end{Highlighting}
+\end{Shaded}
+
+We now present some results from our analysis:
+
+The top ten differentially expressed genes (according to smallest
+adjusted P-value) are:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# top 10 differentially expressed genes}
+\NormalTok{cols.to.print <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"chromosome_name"}\NormalTok{, }\StringTok{"gene_name"}\NormalTok{, }\StringTok{"adjPValue"}\NormalTok{, }\StringTok{"logFC"}\NormalTok{)}
+\NormalTok{top10 <-}\StringTok{ }\KeywordTok{xtable}\NormalTok{(}\KeywordTok{head}\NormalTok{(all.results[, cols.to.print], }\DecValTok{10}\NormalTok{))}
+\KeywordTok{print}\NormalTok{(top10, }\DataTypeTok{include.rownames =} \OtherTok{FALSE}\NormalTok{, }\DataTypeTok{comment =} \OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{llrr}
+  \hline
+chromosome\_name & gene\_name & adjPValue & logFC \\ 
+  \hline
+Y & RPS4Y1 & 0.00 & 10.36 \\ 
+  Y & TXLNG2P & 0.00 & 10.16 \\ 
+  Y & KDM5D & 0.00 & 10.01 \\ 
+  Y & DDX3Y & 0.00 & 9.99 \\ 
+  Y & UTY & 0.00 & 9.95 \\ 
+  X & XIST & 0.00 & -9.86 \\ 
+  Y & USP9Y & 0.00 & 9.84 \\ 
+  Y & EIF1AY & 0.00 & 9.10 \\ 
+  Y & ZFY & 0.00 & 9.02 \\ 
+  Y & TTTY15 & 0.00 & 9.02 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+The bottom ten differentially expressed genes (according to largest
+adjusted P-value) are:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# bottom 10 differentially expressed genes}
+\NormalTok{bottom10 <-}\StringTok{ }\KeywordTok{xtable}\NormalTok{(}\KeywordTok{tail}\NormalTok{(all.results[, cols.to.print], }\DecValTok{10}\NormalTok{))}
+\KeywordTok{print}\NormalTok{(bottom10, }\DataTypeTok{include.rownames =} \OtherTok{FALSE}\NormalTok{, }\DataTypeTok{comment =} \OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{llrr}
+  \hline
+chromosome\_name & gene\_name & adjPValue & logFC \\ 
+  \hline
+16 & PPP4C & 1.00 & -0.00 \\ 
+  X & PIGA & 1.00 & -0.00 \\ 
+  9 & FUBP3 & 1.00 & 0.00 \\ 
+  14 & EIF5 & 1.00 & -0.00 \\ 
+  7 & FAM131B & 1.00 & -0.00 \\ 
+  3 & TMEM41A & 1.00 & 0.00 \\ 
+  14 & GSKIP & 1.00 & -0.00 \\ 
+  22 & C22orf23 & 1.00 & 0.00 \\ 
+  1 & KIAA0040 & 1.00 & 0.00 \\ 
+  20 & CENPB & 1.00 & -0.00 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+We also construct a function that displays a heat map for the genes. The
+rows are the top 20 differentially expressed genes, the columns are the
+samples and each cell is filled with the log counts per million value.
+We use a three colour scale to indicate whether the gene is being up
+(red), down (blue), or stably (white) regulated in the replicate.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{top20_heatmap}\NormalTok{(dge, all.results)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/heat-all-1.pdf}
+\caption{Heatmap of top 20 differentially expressed genes in full counts
+data}
+\end{figure}
+
+We also construct a function to plot the histogram of raw P-values from
+our analysis.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{pvalue_hist}\NormalTok{(all.results, }\DataTypeTok{breaks =} \DecValTok{150}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/pval-hist-1.pdf}
+\caption{P-value histogram for full counts data}
+\end{figure}
+
+The P-values histogram resulting from multiple hypothesis tests on
+continuous data are uniformly distributed between 0 and 1. The histogram
+obtained for comparison of genes are approximately uniformly distributed
+between 0 and 1, which produces approximately equal size bars in the
+histogram. The spike at 0 are the result of the genes that are strongly
+differentially expressed. However, because of multiple comparisons, the
+number of true discoveries is the height of the spike at 0 relative to
+the other bar heights up to 1. There is also a spike at 1 due to the due
+to the discreteness of the counts data.
+
+Finally, we construct a function to store a list of the answers to the
+questions presented below (see appendix for details).
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{all.answers <-}\StringTok{ }\KeywordTok{answer_questions}\NormalTok{(all.results)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Part 1: Questions}\label{part-1-questions}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  How many genes, in total, have P-values below 0.05? What proportion is
+  this of all genes tested? There are 106 genes that have P-values below
+  0.05. The proportion of this to all genes tested is 0.0043.
+\item
+  Out of all genes on the Y chromosome, how many have a P-value below
+  0.05? There are 28 genes on the Y chromosome that have a P-value below
+  0.05. The proportion of this to the total number genes on the Y
+  chromosome is 0.7778.
+\item
+  Out of the 100 genes with the lowest P-values, how many are from the X
+  chromosome? There are 22 X chromosome genes in the top 100 genes with
+  the lowest P-values.
+\item
+  What is the log fold-change for the gene XIST? (This gene is found on
+  the X chromosome and is responsible for inactivating one copy of the
+  X-chromosome in women). Give your answer to four decimal places. The
+  log fold-change for XIST is -9.8561.
+\end{enumerate}
+
+\section{Part 2: Analysis of subsampled
+data}\label{part-2-analysis-of-subsampled-data}
+
+We now carry out a differential gene expression analysis using a subset
+of the full counts data. This time there is only an average of
+approximately 1 million reads per sample. The analysis proceeds the same
+as in Part 1.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# read in the subsampled data, unique to my student number}
+\NormalTok{sub.data <-}\StringTok{ }\KeywordTok{read.delim}\NormalTok{(}\StringTok{"./data//assignment2data_subsampled_666351.tsv"}\NormalTok{, }\DataTypeTok{header =} \OtherTok{TRUE}\NormalTok{, }
+    \DataTypeTok{stringsAsFactors =} \OtherTok{FALSE}\NormalTok{)}
+
+\CommentTok{# column indexes for males and females}
+\NormalTok{female.replicates <-}\StringTok{ }\KeywordTok{grep}\NormalTok{(}\StringTok{"_F"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(sub.data))}
+\NormalTok{male.replicates <-}\StringTok{ }\KeywordTok{grep}\NormalTok{(}\StringTok{"_M"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(sub.data))}
+
+\CommentTok{# filter and split the data set}
+\NormalTok{low.counts.sub <-}\StringTok{ }\KeywordTok{apply}\NormalTok{(sub.data[, female.replicates], }\DecValTok{1}\NormalTok{, median) ==}\StringTok{ }\DecValTok{0} \NormalTok{&}\StringTok{ }\KeywordTok{apply}\NormalTok{(sub.data[, }
+    \NormalTok{male.replicates], }\DecValTok{1}\NormalTok{, median) ==}\StringTok{ }\DecValTok{0}
+
+\NormalTok{sub.filtered <-}\StringTok{ }\NormalTok{sub.data[!low.counts, ]}
+
+\NormalTok{sub.expression <-}\StringTok{ }\NormalTok{sub.filtered[, }\KeywordTok{c}\NormalTok{(female.replicates, male.replicates)]}
+\NormalTok{sub.geneinfo <-}\StringTok{ }\NormalTok{sub.filtered[, -}\KeywordTok{c}\NormalTok{(female.replicates, male.replicates)]}
+
+\CommentTok{# conduct the differentail gene expression analysis}
+\NormalTok{groups <-}\StringTok{ }\KeywordTok{as.numeric}\NormalTok{(}\KeywordTok{grepl}\NormalTok{(}\StringTok{"_M"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(sub.expression)))}
+
+\NormalTok{dge.sub <-}\StringTok{ }\KeywordTok{DGEList}\NormalTok{(}\DataTypeTok{counts =} \NormalTok{sub.expression, }\DataTypeTok{group =} \NormalTok{groups)}
+
+\CommentTok{# then normalise using trimmed mean}
+\NormalTok{dge.sub <-}\StringTok{ }\KeywordTok{calcNormFactors}\NormalTok{(dge.sub)}
+\end{Highlighting}
+\end{Shaded}
+
+We make an MDS plot as before.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# plot MDS to see if we get good seperation between conditions}
+\KeywordTok{plotMDS}\NormalTok{(}\DataTypeTok{x =} \NormalTok{dge.sub, }\DataTypeTok{col =} \KeywordTok{ifelse}\NormalTok{(groups ==}\StringTok{ }\DecValTok{1}\NormalTok{, }\StringTok{"blue"}\NormalTok{, }\StringTok{"green"}\NormalTok{), }\DataTypeTok{cex =} \FloatTok{0.4}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/mds2-1.pdf}
+\caption{MDS plot of replicates in subset data}
+\end{figure}
+
+In this MDS plot the samples in the female group are less similar to
+each other compared to the results in part 1, and there appears to be an
+outlier sample. There appears to be more spread in each group and there
+is less separation between the two groups.
+
+Again we calculate the dispersion factors before computing the
+hypothesis tests.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# calculate dispersion}
+\NormalTok{dge.sub <-}\StringTok{ }\KeywordTok{estimateCommonDisp}\NormalTok{(dge.sub)}
+\NormalTok{dge.sub <-}\StringTok{ }\KeywordTok{estimateTagwiseDisp}\NormalTok{(dge.sub)}
+\CommentTok{# compute P-values}
+\NormalTok{results.sub.all <-}\StringTok{ }\KeywordTok{get_pvalues}\NormalTok{(dge.sub, sub.geneinfo)}
+\end{Highlighting}
+\end{Shaded}
+
+From this analysis we get the following top 10 differentially expressed
+genes:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# print results}
+\NormalTok{top10.sub <-}\StringTok{ }\KeywordTok{xtable}\NormalTok{(}\KeywordTok{head}\NormalTok{(results.sub.all[, cols.to.print], }\DecValTok{10}\NormalTok{))}
+\KeywordTok{print}\NormalTok{(top10.sub, }\DataTypeTok{include.rownames =} \OtherTok{FALSE}\NormalTok{, }\DataTypeTok{comment =} \OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{llrr}
+  \hline
+chromosome\_name & gene\_name & adjPValue & logFC \\ 
+  \hline
+Y & RPS4Y1 & 0.00 & 9.30 \\ 
+  Y & DDX3Y & 0.00 & 8.75 \\ 
+  X & XIST & 0.00 & -9.53 \\ 
+  Y & EIF1AY & 0.00 & 8.26 \\ 
+  Y & KDM5D & 0.00 & 8.71 \\ 
+  Y & TXLNG2P & 0.00 & 9.45 \\ 
+  Y & USP9Y & 0.00 & 7.87 \\ 
+  Y & UTY & 0.00 & 8.35 \\ 
+  Y & PRKY & 0.00 & 7.22 \\ 
+  Y & ZFY & 0.00 & 6.83 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+The bottom 10 differentially expressed genes are:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{bottom10.sub <-}\StringTok{ }\KeywordTok{xtable}\NormalTok{(}\KeywordTok{tail}\NormalTok{(results.sub.all[, cols.to.print], }\DecValTok{10}\NormalTok{))}
+\KeywordTok{print}\NormalTok{(bottom10.sub, }\DataTypeTok{include.rownames =} \OtherTok{FALSE}\NormalTok{, }\DataTypeTok{comment =} \OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{llrr}
+  \hline
+chromosome\_name & gene\_name & adjPValue & logFC \\ 
+  \hline
+21 & AP001421.1 & 1.00 & 0.00 \\ 
+  19 & CTD-2017D11.3 & 1.00 & 0.00 \\ 
+  6 & AL441883.1 & 1.00 & 0.00 \\ 
+  19 & AC003005.2 & 1.00 & 0.00 \\ 
+  3 & LUZPP1 & 1.00 & 0.00 \\ 
+  19 & AC007204.1 & 1.00 & 0.00 \\ 
+  19 & AC115522.3 & 1.00 & 0.00 \\ 
+  19 & AC068499.10 & 1.00 & 0.00 \\ 
+  19 & AC003002.6 & 1.00 & 0.00 \\ 
+  1 & AC096677.1 & 1.00 & 0.00 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+Finally, we plot the heat map of the top 20 differentially expressed
+genes and the P-value distribution.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# answer questions}
+\NormalTok{q.subs <-}\StringTok{ }\KeywordTok{answer_questions}\NormalTok{(results.sub.all)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# draw heatmap}
+\KeywordTok{top20_heatmap}\NormalTok{(dge.sub, results.sub.all)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/sub-heat-1.pdf}
+\caption{Heatmap of gene expression for subset data}
+\end{figure}
+
+From the heatmap we observe that log counts per million amongst
+replicates in the female group are much less pronounced than in part 1.
+However, the general pattern of expression is still present.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# draw P-value histogram}
+\KeywordTok{pvalue_hist}\NormalTok{(results.sub.all, }\DataTypeTok{breaks =} \DecValTok{150}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/sub-pval-1.pdf}
+\caption{Raw P-value distribution for subset data}
+\end{figure}
+
+\subsubsection{Part 2: Questions}\label{part-2-questions}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  How many genes, in total, have P-values below 0.05? What proportion is
+  this of all genes tested? There are 44 genes that have P-values below
+  0.05. The proportion of this to all genes tested is 0.0018.
+\item
+  Out of all genes on the Y chromosome, how many have a P-value below
+  0.05? There are 15 genes on the Y chromosome that have a P-value below
+  0.05. The proportion of this to the total number genes on the Y
+  chromosome is 0.4167.
+\item
+  Out of the 100 genes with the lowest P-values, how many are from the X
+  chromosome? There are 26 X chromosome genes in the top 100 genes with
+  the lowest P-values.
+\item
+  What is the log fold-change for the gene XIST? (This gene is found on
+  the X chromosome and is responsible for inactivating one copy of the
+  X-chromosome in women). Give your answer to four decimal places. The
+  log fold-change for XIST is -9.5347.
+\end{enumerate}
+
+\section{Part 3 - Sensitivity
+analysis}\label{part-3---sensitivity-analysis}
+
+Next we run a differential gene expression analysis by shuffling the
+group memberships randomly.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# set seed for reproducibility}
+\KeywordTok{set.seed}\NormalTok{(}\DecValTok{90014}\NormalTok{)}
+\NormalTok{random.groups <-}\StringTok{ }\KeywordTok{sample}\NormalTok{(}\KeywordTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{), }\DataTypeTok{size =} \DecValTok{40}\NormalTok{, }\DataTypeTok{replace =} \OtherTok{TRUE}\NormalTok{)}
+\KeywordTok{print}\NormalTok{(random.groups)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##  [1] 1 0 0 0 0 0 0 1 0 1 0 0 1 1 0 1 1 0 1 0 0 0 0 0 1 1 0 1 0 1 1 1 1 0 1
+## [36] 1 1 1 1 0
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dge.rand <-}\StringTok{ }\KeywordTok{DGEList}\NormalTok{(}\DataTypeTok{counts =} \NormalTok{sub.expression, }\DataTypeTok{group =} \NormalTok{random.groups)}
+\NormalTok{dge.rand <-}\StringTok{ }\KeywordTok{calcNormFactors}\NormalTok{(dge.rand)}
+\NormalTok{dge.rand <-}\StringTok{ }\KeywordTok{estimateCommonDisp}\NormalTok{(dge.rand)}
+\NormalTok{dge.rand <-}\StringTok{ }\KeywordTok{estimateTagwiseDisp}\NormalTok{(dge.rand)}
+
+\CommentTok{# compute p-values}
+\NormalTok{results.rand <-}\StringTok{ }\KeywordTok{get_pvalues}\NormalTok{(dge.rand, sub.geneinfo)}
+\end{Highlighting}
+\end{Shaded}
+
+For the sensitivity analysis we get the following top 10 differentially
+expressed genes:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# print results}
+\NormalTok{top10.rand <-}\StringTok{ }\KeywordTok{xtable}\NormalTok{(}\KeywordTok{head}\NormalTok{(results.rand[, cols.to.print], }\DecValTok{10}\NormalTok{))}
+\KeywordTok{print}\NormalTok{(top10.rand, }\DataTypeTok{include.rownames =} \OtherTok{FALSE}\NormalTok{, }\DataTypeTok{comment =} \OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{llrr}
+  \hline
+chromosome\_name & gene\_name & adjPValue & logFC \\ 
+  \hline
+22 & IGLV2-18 & 0.03 & -5.17 \\ 
+  14 & IGHA1 & 0.03 & -3.25 \\ 
+  14 & IGHA2 & 0.09 & -3.08 \\ 
+  14 & IGHV2-5 & 0.20 & -2.31 \\ 
+  11 & RIC3 & 0.20 & -1.08 \\ 
+  14 & IGHV6-1 & 0.34 & 2.74 \\ 
+  20 & DPM1 & 0.42 & 1.63 \\ 
+  14 & AL928768.3 & 0.50 & -2.43 \\ 
+  17 & MIR22HG & 0.50 & -0.67 \\ 
+  2 & IGKV4-1 & 0.59 & 1.41 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+The bottom 10 differentially expressed genes are:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{bottom10.rand <-}\StringTok{ }\KeywordTok{xtable}\NormalTok{(}\KeywordTok{tail}\NormalTok{(results.rand[, cols.to.print], }\DecValTok{10}\NormalTok{))}
+\KeywordTok{print}\NormalTok{(bottom10.rand, }\DataTypeTok{include.rownames =} \OtherTok{FALSE}\NormalTok{, }\DataTypeTok{comment =} \OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{llrr}
+  \hline
+chromosome\_name & gene\_name & adjPValue & logFC \\ 
+  \hline
+21 & AP001421.1 & 1.00 & 0.00 \\ 
+  19 & CTD-2017D11.3 & 1.00 & 0.00 \\ 
+  6 & AL441883.1 & 1.00 & 0.00 \\ 
+  19 & AC003005.2 & 1.00 & 0.00 \\ 
+  3 & LUZPP1 & 1.00 & 0.00 \\ 
+  19 & AC007204.1 & 1.00 & 0.00 \\ 
+  19 & AC115522.3 & 1.00 & 0.00 \\ 
+  19 & AC068499.10 & 1.00 & 0.00 \\ 
+  19 & AC003002.6 & 1.00 & 0.00 \\ 
+  1 & AC096677.1 & 1.00 & 0.00 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+Finally, we present the top 20 heat map and the p-value distribution
+plots.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{rand.answers <-}\StringTok{ }\KeywordTok{answer_questions}\NormalTok{(results.rand)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{top20_heatmap}\NormalTok{(dge.rand, results.rand)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/heat-rand-1.pdf}
+\caption{Heatmap of gene expression for sensitivity analysis}
+\end{figure}
+
+In this heatmap we see more cells that have near zero values of log
+counts per million, compared to the heatmap obtained in part 2.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{pvalue_hist}\NormalTok{(results.rand, }\DataTypeTok{breaks =} \DecValTok{150}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/pval-rand-1.pdf}
+\caption{P-value distribution for sensitivity analysis}
+\end{figure}
+
+\subsubsection{Part 3: Questions}\label{part-3-questions}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  How many genes, in total, have P-values below 0.05? What proportion is
+  this of all genes tested? There are 2 genes that have P-values below
+  0.05. The proportion of this to all genes tested is 10\^{}\{-4\}.
+\item
+  Out of all genes on the Y chromosome, how many have a P-value below
+  0.05? There are 0 genes on the Y chromosome that have a P-value below
+  0.05. The proportion of this to the total number genes on the Y
+  chromosome is 0.
+\item
+  Out of the 100 genes with the lowest P-values, how many are from the X
+  chromosome? There are 3 X chromosome genes in the top 100 genes with
+  the lowest P-values.
+\item
+  What is the log fold-change for the gene XIST? (This gene is found on
+  the X chromosome and is responsible for inactivating one copy of the
+  X-chromosome in women). Give your answer to four decimal places. The
+  log fold-change for XIST is -0.7549.
+\end{enumerate}
+
+\section{Part 4 - Discussion}\label{part-4---discussion}
+
+\subsection{Results on full counts data vs.~results on subsampled counts
+data}\label{results-on-full-counts-data-vs.results-on-subsampled-counts-data}
+
+In Part 1 we performed an analysis on the entire RNA-seq data set, which
+had approximately an average of 20 million reads per sample. This
+differed from the analysis performed in part 2, where we had a
+sub-sample of the original data set. This data set has on average 1
+million reads per sample and reads were randomly selected, indicating
+that the data set in part 2 has lower coverage than the full data set
+used in part 1. This alters the count distribution of genes in each
+replicate. This means that we have introduced additional sampling error
+in part 2, decreasing the power to detect differentially expressed genes
+and altering the magnitude of the log fold-change between groups.
+
+We start by comparing the number of samples that were removed in our
+filtered data set that we performed our hypothesis testing on. In part
+1, we filtered 19443 features compared to the 29495 features removed on
+the sub-sampled data set. Moreover, the features included in the
+analysis for part 2 are a subset of the features in part 1, meaning that
+our analysis in part 2 identifies different differentially expressed
+genes.
+
+By examining the MA-plots between analyses, we can see the effect that
+reduced number of features and lower coverage had on our analysis. The
+MA-plot is obtained in \texttt{edgeR} with the function
+\texttt{plotSmear}, it is a plot of the log fold-change between males
+and females (normalised expression) against the average log counts per
+million over both groups. The yellow dots represent the `smear', these
+are points, where counts are low in the libraries of either the male or
+female groups. The top 20 significantly differentially expressed genes
+(by lowest adjusted P-value) are highlighted red. A lowess trend line
+has been fitted to the relationship between M and A.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{par}\NormalTok{(}\DataTypeTok{mfrow =} \KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{))}
+\NormalTok{de.tags.all <-}\StringTok{ }\NormalTok{all.results[}\DecValTok{1}\NormalTok{:}\DecValTok{20}\NormalTok{, }\StringTok{"id"}\NormalTok{]}
+\NormalTok{de.tags.sub <-}\StringTok{ }\NormalTok{results.sub.all[}\DecValTok{1}\NormalTok{:}\DecValTok{20}\NormalTok{, }\StringTok{"id"}\NormalTok{]}
+\KeywordTok{plotSmear}\NormalTok{(dge, }\DataTypeTok{de.tags =} \NormalTok{de.tags.all, }\DataTypeTok{lowess =} \OtherTok{TRUE}\NormalTok{)}
+\KeywordTok{plotSmear}\NormalTok{(dge.sub, }\DataTypeTok{de.tags =} \NormalTok{de.tags.sub, }\DataTypeTok{lowess =} \OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/ma-plots-1.pdf}
+\caption{Diagnostic plots for analysis. (left): MA-plot for full counts
+data. (right): MA-plot for subset counts data.}
+\end{figure}
+
+There are several features of the two plots that we note. In both plots,
+there doesn't appear to be any trend in the relationships between fold
+change and average log counts per million, highlighting that the
+normalisation procedure for both analyses has worked properly. Also
+there are smear points in both plots where genes are in the top 20
+differentially expressed genes, indicating that our P-value estimates
+for these genes may be unreliable.
+
+Comparing the results in the table below we observe that there are fewer
+genes that have P-values below 0.05 in part 2 than in part 1. This makes
+sense because the change in sequence depth in part 2, resulted in
+alteration of the counts matrix, meaning our filtering processed removed
+more candidate genes. The top 10 tables obtained in both analyses are
+relatively similar, with both having 9 genes on the Y chromosome and
+XIST have P-values below 0.05, with large log-FC. We expect that genes
+with large magnitude log fold-changes (effect size) will still be
+identified as differentially expressed even though there is less power.
+
+We see no spike at 0 in the raw P-value histogram for the subset
+results, indicating that we have found fewer truly differentially
+expressed genes. Furthermore, due to discreteness of the counts data, we
+get spikes at intermediate values.
+
+\subsection{Results of sensitivity
+analysis}\label{results-of-sensitivity-analysis}
+
+The sensitivity analysis shuffles the group memberships before
+conducting hypothesis testing. That is, we randomly label some `women'
+as `men' and some `men' as `women' in our replicates and proceed with
+conducting a differential gene expression analysis. In theory, there
+should be no differential gene expression in the shuffled data, however
+there will still be some hits due biological and technical variation.
+
+In the sensitivity analysis, we obtain far fewer significantly
+differentially expressed genes compared to the analysis in part 2. We
+also have no significant hits on the Y chromosome as expected. This
+means there appears to be no glaring issues with the sub-counts data.
+
+\section{References}\label{references}
+
+Anders, S., McCarthy, D. J., Chen, Y., Okoniewski, M., Smyth, G. K.,
+Huber, W., \& Robinson, M. D. (2013). Count-based differential
+expression analysis of RNA sequencing data using R and Bioconductor.
+Nature Protocols, 8(9), 1765--1786. \url{doi:10.1038/nprot.2013.099}
+
+Holmes, S., \& Martin, T. (n.d.). RNA Sequence Analysis in R: edgeR .
+Web.Stanford.Edu. Retrieved October 16, 2014, from
+\url{https://web.stanford.edu/class/bios221/labs/rnaseq/lab_4_rnaseq.html}
+
+Lappalainen, Tuuli, et al. ``Transcriptome and genome sequencing
+uncovers functional variation in humans.'' Nature (2013).
+
+\section{Appendix}\label{appendix}
+
+Further information to reproduce the output of this report.
+
+\textbf{Functions}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{get_pvalues}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## function(dgObj, geneset) {
+##     # function to output a sorted data frame of differentially expressed genes
+##     tmp <- geneset
+##     tmp$id <- rownames(geneset)
+##     results <- exactTest(dgObj)
+##     # obtain adjusted P-values using topTags
+##     top.hits <- topTags(results, n = nrow(geneset), sort.by = "none")$table
+##     top.hits$id <- rownames(top.hits)
+##     names(top.hits) <- sub("FDR", "adjPValue", names(top.hits))
+##     
+##     # merge and then sort results by adjusted p-value and magnitude of log fold
+##     # change
+##     diff.genes <- merge(top.hits, tmp, all.x = TRUE, by = "id")
+##     
+##     diff.genes.sort <- diff.genes[order(diff.genes$adjPValue, -abs(diff.genes$logFC)), 
+##         ]
+##     
+##     return(diff.genes.sort)
+##     
+## }
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{answer_questions}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## function(results_data) {
+##     # this function returns a list with 4 slots where each slot contains a
+##     # vector of solutions to the questions in the assignment spec assume the
+##     # input data frame is sorted
+##     
+##     # q1 number of genes with P-values below 0.05
+##     answers <- list()
+##     signif.genes <- sum(results_data[, "adjPValue"] < 0.05)
+##     prop.signif.genes <- round(signif.genes/nrow(results_data), 4)
+##     answers[["q1"]] <- c(signif.genes, prop.signif.genes)
+##     
+##     # q2 how many genes on Y-chr are differentially expressed
+##     ygenes <- results_data[, "chromosome_name"] == "Y"
+##     signif.ychr <- sum(results_data[ygenes, "adjPValue"] < 0.05)
+##     prop.signif.ychr <- round(signif.ychr/sum(ygenes), 4)
+##     answers[["q2"]] <- c(signif.ychr, prop.signif.ychr)
+##     
+##     
+##     # q3 top 100 genes, how many are from the X chromosome
+##     top100 <- results_data[1:100, ]
+##     topX <- sum(top100$chromosome_name == "X")
+##     answers[["q3"]] <- topX
+##     
+##     # q4 log-FC for xist gene
+##     xist.index <- which(results_data[, "gene_name"] == "XIST")
+##     xist.logFC <- round(results_data[xist.index, "logFC"], 4)
+##     answers[["q4"]] <- c(xist.index, xist.logFC)
+##     
+##     return(answers)
+## }
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{top20_heatmap}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## function(dgeObj, results_data, ...) {
+##     # draw a heatmap from dge object and a data frame that contains results of
+##     # top hits of differentially expressed genes
+##     
+##     # generate a color-pallete
+##     heatcols <- colorRampPalette(c("darkblue", "white", "darkred"))
+##     log.cpm <- cpm(dgeObj, prior.count = 2, log = TRUE)
+##     top20 <- log.cpm[results_data[1:20, "id"], ]
+##     rownames(top20) <- results_data[1:20, "gene_name"]
+##     heatmap(top20, Rowv = NA, Colv = NA, col = heatcols(256), margins = c(3, 
+##         3), cexRow = 0.6, cexCol = 0.4, ...)
+## }
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{pvalue_hist}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## function(results_data, ...) {
+##     # draw a histogram from the dge p-values
+##     hist(results_data[, "PValue"], main = "P-value distribution", xlab = "P-value", 
+##         ...)
+## }
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{sessionInfo}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## R version 3.1.1 (2014-07-10)
+## Platform: x86_64-apple-darwin13.1.0 (64-bit)
+## 
+## locale:
+## [1] en_AU.UTF-8/en_AU.UTF-8/en_AU.UTF-8/C/en_AU.UTF-8/en_AU.UTF-8
+## 
+## attached base packages:
+## [1] stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+## [1] RColorBrewer_1.0-5 xtable_1.7-4       ggplot2_1.0.0     
+## [4] edgeR_3.6.8        limma_3.20.9      
+## 
+## loaded via a namespace (and not attached):
+##  [1] colorspace_1.2-4 digest_0.6.4     evaluate_0.5.5   formatR_1.0     
+##  [5] grid_3.1.1       gtable_0.1.2     htmltools_0.2.6  knitr_1.7       
+##  [9] MASS_7.3-35      munsell_0.4.2    plyr_1.8.1       proto_0.3-10    
+## [13] Rcpp_0.11.3      reshape2_1.4     rmarkdown_0.3.3  scales_0.2.4    
+## [17] stringr_0.6.2    tools_3.1.1      yaml_2.1.13
+\end{verbatim}
+
+\end{document}
